@@ -1,6 +1,6 @@
 # Ante Reconnaissance Script
 
-A reconnaissance tool that works with or without API keys. Does DNS enumeration, subdomain discovery, port scanning, vulnerability checks, and more. 
+A reconnaissance tool that works with or without API keys. Does DNS enumeration, subdomain discovery, port scanning, vulnerability checks, and more.
 
 Named "Ante" after the poker term - you put something up front before seeing what cards you get. Same idea with recon - you invest time upfront to see what's actually there before making your next move.
 
@@ -28,12 +28,15 @@ export CHAOS_API_KEY="your_key_here"
 ## Requirements
 
 **Essential:**
+
 - dig, whois, nmap, curl, jq
 
 **Optional (for better results):**
+
 - subfinder, httpx, nuclei, naabu
 
 Install the Go tools:
+
 ```bash
 go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
 go install github.com/projectdiscovery/httpx/cmd/httpx@latest
@@ -49,13 +52,15 @@ go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
 ## API Keys (Optional)
 
 For enhanced subdomain discovery:
-- GitHub: https://github.com/settings/tokens
-- Chaos: https://chaos.projectdiscovery.io/
-- URLScan: https://urlscan.io/user/signup
+
+- [GitHub](https://github.com/settings/tokens)
+- [Chaos](https://chaos.projectdiscovery.io/)
+- [URLScan](https://urlscan.io/user/signup)
 
 ## Output
 
 Creates a timestamped directory with:
+
 - Detailed markdown report
 - Investigation checklist  
 - Raw scan results
