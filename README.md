@@ -1,7 +1,4 @@
-- Enhanced subdomain discovery via multiple APIs
-- GitHub code search for sensitive data exposure
-- VirusTotal threat intelligence and reputation analysis
-- Microsoft/# Ante Advanced Reconnaissance System
+# Ante
 
 A flexible reconnaissance tool that works with or without API keys. Performs comprehensive domain analysis including DNS enumeration, subdomain discovery, port scanning, vulnerability assessment, and threat intelligence gathering.
 
