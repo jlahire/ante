@@ -231,7 +231,7 @@ fi
 # Check essential tools
 echo -e "\n${YELLOW}[*] Checking available tools...${NC}"
 ESSENTIAL_TOOLS=("dig" "whois" "nmap" "curl" "jq")
-OPTIONAL_TOOLS=("subfinder" "httpx" "nuclei" "katana" "naabu")
+OPTIONAL_TOOLS=("subfinder" "httpx" "nuclei" "katana" "naabu" "subzy")
 
 for tool in "${ESSENTIAL_TOOLS[@]}"; do
     if ! check_and_display_tool "$tool" "true"; then
@@ -382,9 +382,78 @@ LIVE_COUNT=$(count_results "$OUTPUT_DIR/live_hosts/live_hosts.txt")
 log_phase "3" "Live Host Discovery - Found $LIVE_COUNT live hosts"
 
 # =============================================================================
-# PHASE 4: PORT SCANNING
+# PHASE 4: SUBDOMAIN TAKEOVER DETECTION
 # =============================================================================
-display_phase_header "4" "NETWORK PORT SCANNING"
+display_phase_header "4" "SUBDOMAIN TAKEOVER DETECTION"
+
+display_operation "Checking for subdomain takeover vulnerabilities..."
+if [[ " ${AVAILABLE_TOOLS[*]} " =~ " subzy " ]] && [ "$SUBDOMAIN_COUNT" -gt 0 ]; then
+    if [ -f "$OUTPUT_DIR/subdomains/all_subdomains.txt" ] && [ -s "$OUTPUT_DIR/subdomains/all_subdomains.txt" ]; then
+        display_operation "Running subzy against discovered subdomains..."
+        subzy run --targets "$OUTPUT_DIR/subdomains/all_subdomains.txt" --concurrency 20 --timeout 10 --output "$OUTPUT_DIR/vulns/subdomain_takeover.txt" 2>/dev/null || {
+            display_warning "Subzy scan encountered issues, creating empty results file"
+            touch "$OUTPUT_DIR/vulns/subdomain_takeover.txt"
+        }
+        
+        # Also check live hosts specifically
+        if [ -f "$OUTPUT_DIR/live_hosts/live_hosts.txt" ] && [ -s "$OUTPUT_DIR/live_hosts/live_hosts.txt" ]; then
+            display_operation "Checking live hosts for takeover vulnerabilities..."
+            # Extract just the hostnames from URLs
+            cat "$OUTPUT_DIR/live_hosts/live_hosts.txt" | sed 's|https\?://||' | sed 's|/.*||' | sort -u > "$OUTPUT_DIR/vulns/live_hostnames.txt"
+            subzy run --targets "$OUTPUT_DIR/vulns/live_hostnames.txt" --concurrency 20 --timeout 10 --output "$OUTPUT_DIR/vulns/live_takeover.txt" 2>/dev/null || touch "$OUTPUT_DIR/vulns/live_takeover.txt"
+            
+            # Combine results
+            cat "$OUTPUT_DIR/vulns/subdomain_takeover.txt" "$OUTPUT_DIR/vulns/live_takeover.txt" 2>/dev/null | sort -u > "$OUTPUT_DIR/vulns/takeover_combined.txt" || touch "$OUTPUT_DIR/vulns/takeover_combined.txt"
+            mv "$OUTPUT_DIR/vulns/takeover_combined.txt" "$OUTPUT_DIR/vulns/subdomain_takeover.txt"
+        fi
+    else
+        display_warning "No subdomains found for takeover testing"
+        touch "$OUTPUT_DIR/vulns/subdomain_takeover.txt"
+    fi
+elif [[ ! " ${AVAILABLE_TOOLS[*]} " =~ " subzy " ]]; then
+    display_warning "Subzy not available - skipping subdomain takeover detection"
+    display_info "Install with: go install -v github.com/PentestPad/subzy@latest"
+    touch "$OUTPUT_DIR/vulns/subdomain_takeover.txt"
+elif [ "$SUBDOMAIN_COUNT" -eq 0 ]; then
+    display_warning "No subdomains found - skipping takeover detection"
+    touch "$OUTPUT_DIR/vulns/subdomain_takeover.txt"
+else
+    display_warning "Skipping subdomain takeover detection - requirements not met"
+    touch "$OUTPUT_DIR/vulns/subdomain_takeover.txt"
+fi
+
+display_operation "Processing takeover detection results..."
+if [ ! -f "$OUTPUT_DIR/vulns/subdomain_takeover.txt" ]; then
+    touch "$OUTPUT_DIR/vulns/subdomain_takeover.txt"
+fi
+
+TAKEOVER_COUNT=$(count_results "$OUTPUT_DIR/vulns/subdomain_takeover.txt")
+
+display_operation "Creating takeover vulnerability summary..."
+if [ "$TAKEOVER_COUNT" -gt 0 ]; then
+    echo "# Subdomain Takeover Summary - $(date)" > "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    echo "Potential subdomain takeovers found: $TAKEOVER_COUNT" >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    echo "" >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    echo "CRITICAL: These findings indicate potential subdomain takeover vulnerabilities." >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    echo "Immediate manual verification and remediation recommended." >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    echo "" >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    
+    if [ -s "$OUTPUT_DIR/vulns/subdomain_takeover.txt" ]; then
+        echo "Vulnerable subdomains:" >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+        cat "$OUTPUT_DIR/vulns/subdomain_takeover.txt" >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    fi
+else
+    echo "# No subdomain takeover vulnerabilities detected - $(date)" > "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    echo "This automated scan found no obvious takeover vulnerabilities." >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+    echo "Manual verification of suspicious subdomains is still recommended." >> "$OUTPUT_DIR/vulns/takeover_summary.txt"
+fi
+
+log_phase "4" "Subdomain Takeover Detection - Found $TAKEOVER_COUNT potential takeovers"
+
+# =============================================================================
+# PHASE 5: PORT SCANNING
+# =============================================================================
+display_phase_header "5" "NETWORK PORT SCANNING"
 
 if [ $LIVE_COUNT -gt 0 ]; then
     display_operation "Extracting target hosts for port scanning..."
@@ -408,12 +477,12 @@ else
 fi
 
 OPEN_PORTS=$(count_results "$OUTPUT_DIR/portscan/open_ports.txt")
-log_phase "4" "Port Scanning - Found $OPEN_PORTS open ports"
+log_phase "5" "Port Scanning - Found $OPEN_PORTS open ports"
 
 # =============================================================================
-# PHASE 5: SSL CERTIFICATE ANALYSIS
+# PHASE 6: SSL CERTIFICATE ANALYSIS
 # =============================================================================
-display_phase_header "5" "SSL CERTIFICATE ANALYSIS"
+display_phase_header "6" "SSL CERTIFICATE ANALYSIS"
 
 display_operation "Analyzing SSL certificates..."
 https_hosts=$(grep "https://" "$OUTPUT_DIR/live_hosts/live_hosts.txt" 2>/dev/null || true)
@@ -429,13 +498,13 @@ fi
 display_operation "Processing certificate information..."
 SSL_COUNT=$(echo "$https_hosts" | wc -l)
 
-log_phase "5" "SSL Analysis - Analyzed $SSL_COUNT certificates"
+log_phase "6" "SSL Analysis - Analyzed $SSL_COUNT certificates"
 
 # =============================================================================
-# PHASE 6: CLOUD INFRASTRUCTURE RECONNAISSANCE  
+# PHASE 7: CLOUD INFRASTRUCTURE RECONNAISSANCE  
 # =============================================================================
 if [ "$SKIP_CLOUD_SCAN" = "false" ]; then
-    display_phase_header "6" "CLOUD INFRASTRUCTURE ANALYSIS"
+    display_phase_header "7" "CLOUD INFRASTRUCTURE ANALYSIS"
     
     display_operation "Extracting IPs for cloud analysis..."
     cat "$OUTPUT_DIR/live_hosts/live_hosts.txt" 2>/dev/null | sed 's|https\?://||' | sed 's|/.*||' | sort -u > "$OUTPUT_DIR/cloud_recon/target_hosts.txt" || touch "$OUTPUT_DIR/cloud_recon/target_hosts.txt"
@@ -448,6 +517,48 @@ if [ "$SKIP_CLOUD_SCAN" = "false" ]; then
     GCP_MATCHES=0
     CF_MATCHES=0
     VT_MATCHES=0
+    
+    # Check if cloud ranges exist, download if missing
+    if [ ! -d "cloud_ranges" ]; then
+        display_operation "Creating cloud_ranges directory..."
+        mkdir -p cloud_ranges
+    fi
+    
+    # Download AWS ranges if missing
+    if [ ! -f "cloud_ranges/aws_ec2_ranges.txt" ]; then
+        display_operation "Downloading AWS IP ranges..."
+        if curl -s https://ip-ranges.amazonaws.com/ip-ranges.json -o cloud_ranges/aws-ip-ranges.json; then
+            jq -r '.prefixes[] | select(.service=="EC2") | .ip_prefix' cloud_ranges/aws-ip-ranges.json > cloud_ranges/aws_ec2_ranges.txt 2>/dev/null || touch cloud_ranges/aws_ec2_ranges.txt
+        else
+            touch cloud_ranges/aws_ec2_ranges.txt
+        fi
+    fi
+    
+    # Download GCP ranges if missing
+    if [ ! -f "cloud_ranges/gcp_ranges.txt" ]; then
+        display_operation "Downloading GCP IP ranges..."
+        if curl -s https://www.gstatic.com/ipranges/cloud.json -o cloud_ranges/gcp-cloud.json; then
+            jq -r '.prefixes[].ipv4Prefix | select(. != null)' cloud_ranges/gcp-cloud.json > cloud_ranges/gcp_ranges.txt 2>/dev/null || touch cloud_ranges/gcp_ranges.txt
+        else
+            touch cloud_ranges/gcp_ranges.txt
+        fi
+    fi
+    
+    # Download Cloudflare ranges if missing
+    if [ ! -f "cloud_ranges/cloudflare_v4.txt" ]; then
+        display_operation "Downloading Cloudflare IP ranges..."
+        curl -s https://www.cloudflare.com/ips-v4 > cloud_ranges/cloudflare_v4.txt 2>/dev/null || touch cloud_ranges/cloudflare_v4.txt
+    fi
+    
+    # Download VirusTotal ranges if missing
+    if [ ! -f "cloud_ranges/virustotal_ranges.txt" ]; then
+        display_operation "Downloading VirusTotal IP ranges..."
+        if curl -s https://www.gstatic.com/ipranges/goog.json -o cloud_ranges/virustotal-ranges.json; then
+            jq -r '.prefixes[].ipv4Prefix | select(. != null)' cloud_ranges/virustotal-ranges.json > cloud_ranges/virustotal_ranges.txt 2>/dev/null || touch cloud_ranges/virustotal_ranges.txt
+        else
+            touch cloud_ranges/virustotal_ranges.txt
+        fi
+    fi
     
     if [ -f "cloud_ranges/aws_ec2_ranges.txt" ]; then
         display_operation "Checking AWS IP ranges..."
@@ -535,7 +646,7 @@ except: pass
         display_operation "Generating cloud infrastructure summary..."
         display_success "Cloud analysis complete: AWS($AWS_MATCHES) GCP($GCP_MATCHES) Cloudflare($CF_MATCHES) VirusTotal($VT_MATCHES)"
 
-        log_phase "6" "Cloud Reconnaissance - Found $TOTAL_CLOUD_MATCHES total matches"
+        log_phase "7" "Cloud Reconnaissance - Found $TOTAL_CLOUD_MATCHES total matches"
     else
         display_warning "Cloud IP ranges not found in current directory"
         display_operation "Creating informational message about cloud ranges..."
@@ -544,22 +655,22 @@ except: pass
         GCP_MATCHES=0
         CF_MATCHES=0
         VT_MATCHES=0
-        log_phase "6" "Cloud Reconnaissance - Skipped (no ranges)"
+        log_phase "7" "Cloud Reconnaissance - Skipped (no ranges)"
     fi
 else
-    display_phase_header "6" "CLOUD INFRASTRUCTURE ANALYSIS"
+    display_phase_header "7" "CLOUD INFRASTRUCTURE ANALYSIS"
     display_info "Cloud scanning disabled by user"
     AWS_MATCHES=0
     GCP_MATCHES=0
     CF_MATCHES=0
     TOTAL_CLOUD_MATCHES=0
-    log_phase "6" "Cloud Reconnaissance - Skipped by user"
+    log_phase "7" "Cloud Reconnaissance - Skipped by user"
 fi
 
 # =============================================================================
-# PHASE 7: WEB TECHNOLOGY DETECTION
+# PHASE 8: WEB TECHNOLOGY DETECTION
 # =============================================================================
-display_phase_header "7" "WEB TECHNOLOGY DETECTION"
+display_phase_header "8" "WEB TECHNOLOGY DETECTION"
 
 display_operation "Extracting web technologies from httpx results..."
 if [ -f "$OUTPUT_DIR/live_hosts/httpx_detailed.json" ]; then
@@ -580,12 +691,12 @@ fi
 display_operation "Categorizing and analyzing tech stacks..."
 TECH_COUNT=$(count_results "$OUTPUT_DIR/tech_stack/technologies.txt")
 
-log_phase "7" "Technology Detection - Found $TECH_COUNT tech stacks"
+log_phase "8" "Technology Detection - Found $TECH_COUNT tech stacks"
 
 # =============================================================================
-# PHASE 8: VULNERABILITY SCANNING
+# PHASE 9: VULNERABILITY SCANNING
 # =============================================================================
-display_phase_header "8" "VULNERABILITY ASSESSMENT"
+display_phase_header "9" "VULNERABILITY ASSESSMENT"
 
 display_operation "Initializing Nuclei scanner..."
 if [[ " ${AVAILABLE_TOOLS[*]} " =~ " nuclei " ]] && [ "$LIVE_COUNT" -gt 0 ]; then
@@ -648,13 +759,13 @@ else
     echo "Manual testing is recommended for thorough assessment." >> "$OUTPUT_DIR/vulns/vulnerability_summary.txt"
 fi
 
-log_phase "8" "Vulnerability Scanning - Found $VULN_COUNT potential vulnerabilities"
+log_phase "9" "Vulnerability Scanning - Found $VULN_COUNT potential vulnerabilities"
 
 # =============================================================================
-# PHASE 9: GITHUB RECONNAISSANCE (FULL MODE ONLY)
+# PHASE 10: GITHUB RECONNAISSANCE (FULL MODE ONLY)
 # =============================================================================
 if [ "$RECON_MODE" = "FULL" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
-    display_phase_header "9" "GITHUB INTELLIGENCE GATHERING"
+    display_phase_header "10" "GITHUB INTELLIGENCE GATHERING"
     
     display_operation "Searching for domain mentions with credentials..."
     GITHUB_QUERIES=("\"$TARGET_DOMAIN\" password" "\"$TARGET_DOMAIN\" api_key" "\"$TARGET_DOMAIN\" secret" "\"$TARGET_DOMAIN\" token")
@@ -676,19 +787,19 @@ if [ "$RECON_MODE" = "FULL" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
     display_operation "Extracting sensitive URLs..."
     GITHUB_RESULTS=$(count_results "$OUTPUT_DIR/github/sensitive_urls.txt")
     
-    log_phase "9" "GitHub Reconnaissance - Found $GITHUB_RESULTS potential matches"
+    log_phase "10" "GitHub Reconnaissance - Found $GITHUB_RESULTS potential matches"
 else
-    display_phase_header "9" "GITHUB RECONNAISSANCE"
+    display_phase_header "10" "GITHUB RECONNAISSANCE"
     display_info "GitHub reconnaissance skipped (Basic mode or no token)"
     echo "# GitHub reconnaissance not available in basic mode" > "$OUTPUT_DIR/github/skipped.txt"
     GITHUB_RESULTS=0
 fi
 
 # =============================================================================
-# PHASE 10: MICROSOFT/OFFICE365 ENUMERATION (FULL MODE ONLY)
+# PHASE 11: MICROSOFT/OFFICE365 ENUMERATION (FULL MODE ONLY)
 # =============================================================================
 if [ "$RECON_MODE" = "FULL" ]; then
-    display_phase_header "10" "MICROSOFT SERVICES ENUMERATION"
+    display_phase_header "11" "MICROSOFT SERVICES ENUMERATION"
     
     display_operation "Checking autodiscover services..."
     MS_SUBDOMAINS=("autodiscover" "lyncdiscover" "sip" "enterpriseregistration" "enterpriseenrollment")
@@ -706,18 +817,18 @@ if [ "$RECON_MODE" = "FULL" ]; then
     display_operation "Processing Microsoft service results..."
     MS_SERVICES=$(count_results "$OUTPUT_DIR/microsoft/ms_services.txt")
     
-    log_phase "10" "Microsoft Enumeration - Found $MS_SERVICES services"
+    log_phase "11" "Microsoft Enumeration - Found $MS_SERVICES services"
 else
-    display_phase_header "10" "MICROSOFT ENUMERATION"
+    display_phase_header "11" "MICROSOFT ENUMERATION"
     display_info "Microsoft enumeration skipped (Basic mode)"
     echo "# Microsoft enumeration not available in basic mode" > "$OUTPUT_DIR/microsoft/skipped.txt"
     MS_SERVICES=0
 fi
 
 # =============================================================================
-# PHASE 11: REPORT GENERATION
+# PHASE 12: REPORT GENERATION
 # =============================================================================
-display_phase_header "11" "REPORT GENERATION AND ANALYSIS"
+display_phase_header "12" "REPORT GENERATION AND ANALYSIS"
 
 display_operation "Generating executive summary..."
 REPORT_FILE="$OUTPUT_DIR/summary/reconnaissance_report.md"
@@ -743,6 +854,7 @@ This reconnaissance assessment was conducted using the flexible reconnaissance s
 | Open Network Ports | $OPEN_PORTS | Accessible services |
 | SSL Certificates | $SSL_COUNT | Certificate analysis completed |
 | Web Technologies | $TECH_COUNT | Identified technology stacks |
+| Subdomain Takeovers | $TAKEOVER_COUNT | Potential takeover vulnerabilities |
 | Potential Vulnerabilities | $VULN_COUNT | Nuclei scanner results |
 EOF
 
@@ -785,7 +897,7 @@ HVEOF
 display_operation "Compiling timeline and statistics..."
 display_operation "Finalizing comprehensive report..."
 
-log_phase "11" "Report Generation - Complete"
+log_phase "12" "Report Generation - Complete"
 
 # =============================================================================
 # FINAL SUMMARY AND CLEANUP
@@ -823,6 +935,7 @@ printf "${YELLOW}%-25s${NC} %s\n" "Live Web Services:" "$LIVE_COUNT"
 printf "${YELLOW}%-25s${NC} %s\n" "Open Ports:" "$OPEN_PORTS"
 printf "${YELLOW}%-25s${NC} %s\n" "SSL Certificates:" "$SSL_COUNT"
 printf "${YELLOW}%-25s${NC} %s\n" "Technologies:" "$TECH_COUNT"
+printf "${YELLOW}%-25s${NC} %s\n" "Subdomain Takeovers:" "$TAKEOVER_COUNT"
 printf "${YELLOW}%-25s${NC} %s\n" "Vulnerabilities:" "$VULN_COUNT"
 
 if [ "$RECON_MODE" = "FULL" ]; then
@@ -868,6 +981,10 @@ fi
 
 # Priority recommendations
 echo -e "\n${BLUE}NEXT STEPS:${NC}"
+if [ "$TAKEOVER_COUNT" -gt 0 ]; then
+    echo -e "${RED}  CRITICAL: Review subdomain takeovers in vulns/subdomain_takeover.txt${NC}"
+fi
+
 if [ "$VULN_COUNT" -gt 0 ]; then
     echo -e "${RED}  URGENT: Review vulnerabilities in vulns/nuclei_results.txt${NC}"
 fi
