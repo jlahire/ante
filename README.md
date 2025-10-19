@@ -108,6 +108,14 @@ ante_recon_domain.com_20240922_143022/
 - Follow responsible disclosure
 - Respect API terms of service
 
+## License
+GNU Affero General Public License v3.0 (AGPL-3.0)
+
+See LICENSE for details
+
+## Contributing
+Contributions are welcome! Please feel free to submit a Pull Request.
+
 ## Credits
 
 **Tools**: ProjectDiscovery (subfinder, httpx, nuclei, naabu), s0md3v (smap), PentestPad (subzy)
