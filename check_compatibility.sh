@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Ante System Compatibility and Health Checker
-# Validates all components and fixes common issues
+# Enhanced Ante System Compatibility and Health Checker v2.0
+# Validates all components including Smap and fixes common issues
 # Author: @jLaHire - September 2025
 
 RED='\033[0;31m'
@@ -14,8 +14,8 @@ NC='\033[0m'
 INSTALL_DIR="$HOME/ante_recon"
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║           Ante System Compatibility Checker                  ║${NC}"
-echo -e "${BLUE}║          Validates and fixes common issues                   ║${NC}"
+echo -e "${BLUE}║        Enhanced Ante System Compatibility Checker v2.0       ║${NC}"
+echo -e "${BLUE}║       Validates components including Smap integration        ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 
 # Function to check and report status
@@ -69,7 +69,7 @@ else
 fi
 
 # Check essential system tools
-echo -e "\n${CYAN}🛠️  System Tools Check${NC}"
+echo -e "\n${CYAN}🛠️  Essential System Tools Check${NC}"
 ESSENTIAL_TOOLS=("curl" "jq" "dig" "nmap" "openssl" "whois" "python3")
 MISSING_ESSENTIAL=()
 
@@ -82,21 +82,49 @@ for tool in "${ESSENTIAL_TOOLS[@]}"; do
     fi
 done
 
-# Check Go tools
-echo -e "\n${CYAN}🔧 Go-based Tools Check${NC}"
-GO_TOOLS=("subfinder" "httpx" "nuclei" "katana" "naabu" "subzy")
+# Check enhanced Go tools with Smap
+echo -e "\n${CYAN}🚀 Enhanced Go Tools Check (Including Smap)${NC}"
+GO_TOOLS=("subfinder" "httpx" "nuclei" "katana" "naabu" "subzy" "smap")
 AVAILABLE_GO_TOOLS=0
 MISSING_GO_TOOLS=()
+SMAP_AVAILABLE=false
 
 for tool in "${GO_TOOLS[@]}"; do
     if command -v "$tool" &> /dev/null; then
-        check_status "$tool" "ok"
+        if [ "$tool" = "smap" ]; then
+            check_status "$tool" "ok" "Shodan-powered passive scanning (200 hosts/sec)"
+            SMAP_AVAILABLE=true
+        else
+            check_status "$tool" "ok"
+        fi
         AVAILABLE_GO_TOOLS=$((AVAILABLE_GO_TOOLS + 1))
     else
-        check_status "$tool" "warning" "Optional tool not installed"
+        if [ "$tool" = "smap" ]; then
+            check_status "$tool" "warning" "Shodan-powered passive scanning - HIGHLY RECOMMENDED"
+        else
+            check_status "$tool" "warning" "Optional tool not installed"
+        fi
         MISSING_GO_TOOLS+=("$tool")
     fi
 done
+
+# Smap-specific capabilities check
+if [ "$SMAP_AVAILABLE" = true ]; then
+    echo -e "\n${CYAN}⚡ Smap Capabilities Verification${NC}"
+    
+    # Test Smap functionality
+    if timeout 10 smap --help &> /dev/null; then
+        check_status "Smap functionality" "ok" "Ready for passive reconnaissance"
+    else
+        check_status "Smap functionality" "warning" "Installed but may have issues"
+    fi
+    
+    # Check Smap version and features
+    SMAP_VERSION=$(smap --version 2>/dev/null || echo "unknown")
+    if [ "$SMAP_VERSION" != "unknown" ]; then
+        check_status "Smap version" "ok" "Version: $SMAP_VERSION"
+    fi
+fi
 
 # Check Python modules
 echo -e "\n${CYAN}🐍 Python Dependencies Check${NC}"
@@ -110,7 +138,7 @@ for module in "${PYTHON_MODULES[@]}"; do
 done
 
 # Check API configuration
-echo -e "\n${CYAN}🔑 API Configuration Check${NC}"
+echo -e "\n${CYAN}🔐 API Configuration Check${NC}"
 API_COUNT=0
 
 if [ -n "${GITHUB_TOKEN:-}" ]; then
@@ -157,7 +185,7 @@ CONFIG_FILES=(
     "$INSTALL_DIR/config/environment_setup.sh"
     "$INSTALL_DIR/config/subfinder_config.yaml"
     "$INSTALL_DIR/setup_apis.sh"
-    "$INSTALL_DIR/validate_system.sh"
+    "$INSTALL_DIR/check_compatibility.sh"
 )
 
 for file in "${CONFIG_FILES[@]}"; do
@@ -176,8 +204,9 @@ done
 # Check wordlists
 echo -e "\n${CYAN}📚 Wordlists Check${NC}"
 WORDLIST_FILES=(
-    "$INSTALL_DIR/wordlists/basic_subdomains.txt"
+    "$INSTALL_DIR/wordlists/enhanced_subdomains.txt"
     "$INSTALL_DIR/wordlists/subdomains-top1million-5000.txt"
+    "$INSTALL_DIR/wordlists/config_endpoints.txt"
 )
 
 for file in "${WORDLIST_FILES[@]}"; do
@@ -195,6 +224,7 @@ CLOUD_FILES=(
     "$INSTALL_DIR/cloud_ranges/aws_ec2_ranges.txt"
     "$INSTALL_DIR/cloud_ranges/gcp_ranges.txt"
     "$INSTALL_DIR/cloud_ranges/cloudflare_v4.txt"
+    "$INSTALL_DIR/cloud_ranges/azure_ranges.txt"
 )
 
 CLOUD_RANGES_EXIST=0
@@ -208,9 +238,9 @@ for file in "${CLOUD_FILES[@]}"; do
     fi
 done
 
-# System Summary
+# Enhanced System Summary
 echo -e "\n${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║                      SYSTEM SUMMARY                          ║${NC}"
+echo -e "${BLUE}║                 ENHANCED SYSTEM SUMMARY v2.0                 ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 
 # Determine system status
@@ -231,14 +261,20 @@ else
     echo -e "   Using public sources and built-in capabilities"
 fi
 
+# Enhanced capability reporting
 echo ""
-echo -e "${CYAN}Tool Status:${NC}"
+echo -e "${CYAN}Enhanced Tool Status:${NC}"
 echo -e "  Essential: $((${#ESSENTIAL_TOOLS[@]} - ${#MISSING_ESSENTIAL[@]}))/${#ESSENTIAL_TOOLS[@]} available"
 echo -e "  Go Tools: $AVAILABLE_GO_TOOLS/${#GO_TOOLS[@]} available"
-echo -e "  APIs: $API_COUNT/3 configured"
-echo -e "  Cloud Ranges: $CLOUD_RANGES_EXIST/3 available"
+if [ "$SMAP_AVAILABLE" = true ]; then
+    echo -e "  ${GREEN}Smap Integration: ACTIVE (passive scanning enabled)${NC}"
+else
+    echo -e "  ${YELLOW}Smap Integration: MISSING (install for 200x speed boost)${NC}"
+fi
+echo -e "  APIs: $API_COUNT/4 configured"
+echo -e "  Cloud Ranges: $CLOUD_RANGES_EXIST/4 available"
 
-# Recommendations
+# Recommendations with Smap focus
 echo -e "\n${YELLOW}RECOMMENDATIONS:${NC}"
 
 if [ ${#MISSING_ESSENTIAL[@]} -gt 0 ]; then
@@ -249,25 +285,30 @@ if [ ${#MISSING_ESSENTIAL[@]} -gt 0 ]; then
     echo ""
 fi
 
-if [ $AVAILABLE_GO_TOOLS -lt 3 ]; then
-    echo -e "${YELLOW}ENHANCEMENT:${NC} Install Go tools for better capabilities:"
-    echo -e "  go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
-    echo -e "  go install github.com/projectdiscovery/httpx/cmd/httpx@latest"
-    echo -e "  go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
-    echo -e "  go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"
-    echo -e "  go install github.com/PentestPad/subzy@latest"
+if [ "$SMAP_AVAILABLE" = false ]; then
+    echo -e "${YELLOW}HIGH PRIORITY:${NC} Install Smap for enhanced passive scanning:"
+    echo -e "  ${CYAN}go install github.com/s0md3v/smap/cmd/smap@latest${NC}"
+    echo -e "  Benefits:"
+    echo -e "    • 200 hosts/second scanning speed"
+    echo -e "    • No direct contact with targets (stealth)"
+    echo -e "    • Vulnerability detection via Shodan data"
+    echo -e "    • ~4000 ports scanned by default"
+    echo ""
+fi
+
+if [ $AVAILABLE_GO_TOOLS -lt 4 ]; then
+    echo -e "${YELLOW}ENHANCEMENT:${NC} Install additional Go tools for complete capabilities:"
+    for tool in "${MISSING_GO_TOOLS[@]}"; do
+        if [ "$tool" != "smap" ]; then  # Already covered above
+            echo -e "  go install github.com/projectdiscovery/$tool/cmd/$tool@latest"
+        fi
+    done
     echo ""
 fi
 
 if [ $API_COUNT -eq 0 ]; then
     echo -e "${YELLOW}ENHANCEMENT:${NC} Configure free APIs for Full Mode:"
     echo -e "  Run: $INSTALL_DIR/setup_apis.sh"
-    echo ""
-fi
-
-if [ $CLOUD_RANGES_EXIST -eq 0 ]; then
-    echo -e "${YELLOW}ENHANCEMENT:${NC} Download cloud provider ranges:"
-    echo -e "  Run: $INSTALL_DIR/update_ranges.sh"
     echo ""
 fi
 
@@ -278,7 +319,7 @@ if [ ! -f "$INSTALL_DIR/ante.sh" ]; then
 fi
 
 if [ ${#MISSING_ESSENTIAL[@]} -eq 0 ] && [ "$SYSTEM_READY" = true ]; then
-    echo -e "${GREEN}  ✅ System ready for reconnaissance!${NC}"
+    echo -e "${GREEN}  ✅ System ready for enhanced reconnaissance!${NC}"
     echo ""
     echo -e "${CYAN}Test the system:${NC}"
     if [ "$SYSTEM_MODE" = "FULL" ]; then
@@ -286,19 +327,40 @@ if [ ${#MISSING_ESSENTIAL[@]} -eq 0 ] && [ "$SYSTEM_READY" = true ]; then
     else
         echo -e "  $INSTALL_DIR/ante.sh example.com --no-apis"
     fi
+    
+    if [ "$SMAP_AVAILABLE" = true ]; then
+        echo -e "\n${GREEN}Smap passive scanning ready:${NC}"
+        echo -e "  • Ultra-fast reconnaissance without target contact"
+        echo -e "  • Automatic vulnerability intelligence"
+        echo -e "  • Perfect for large-scale assessments"
+    fi
 fi
 
 # PATH check
 echo -e "\n${CYAN}🛤️  PATH Configuration${NC}"
 if echo "$PATH" | grep -q "$INSTALL_DIR"; then
     check_status "Ante in PATH" "ok"
-    echo -e "   Available commands: ante, ante-validate, ante-setup"
+    echo -e "   Available commands: ante, ante-check, ante-setup, ante-update-ranges"
 else
     check_status "Ante in PATH" "warning" "Add to PATH for convenience"
     echo -e "   Run: echo 'export PATH=\"\$PATH:$INSTALL_DIR\"' >> ~/.bashrc"
 fi
 
-echo -e "\n${GREEN}Compatibility check complete!${NC}"
+# Performance expectations
+echo -e "\n${CYAN}🚀 Performance Expectations:${NC}"
+if [ "$SMAP_AVAILABLE" = true ]; then
+    echo -e "  ${GREEN}With Smap: ~200 hosts/second passive scanning${NC}"
+    echo -e "  ${GREEN}Port discovery: ~4000 ports per target${NC}"
+    echo -e "  ${GREEN}Stealth level: Maximum (no target contact)${NC}"
+else
+    echo -e "  ${YELLOW}Without Smap: Standard reconnaissance speed${NC}"
+    echo -e "  ${YELLOW}Missing passive intelligence capabilities${NC}"
+fi
+
+echo -e "  Traditional scanning: 1000 ports per target"
+echo -e "  Combined approach: Maximum coverage with speed"
+
+echo -e "\n${GREEN}Enhanced compatibility check complete!${NC}"
 
 # Exit with appropriate code
 if [ "$SYSTEM_READY" = true ]; then
